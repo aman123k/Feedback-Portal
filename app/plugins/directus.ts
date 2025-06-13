@@ -117,7 +117,7 @@ export const cookie = createCookie("auth", {
   secure: true,
   secrets: [COOKIES_SECRET],
   expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days for refresh token
-  maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+  maxAge: 60 * 60,
 });
 
 // REFRESH TOKEN COOKIE

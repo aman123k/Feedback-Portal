@@ -39,7 +39,6 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   try {
-    // const session = await getSession(request.headers.get("Cookie"));
     const result = await userLogin(email, password);
 
     if (result?.success) {

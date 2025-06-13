@@ -11,12 +11,18 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@directus/sdk": "^19.1.0",
+    "@mantine/core": "^6.0.22",
+    "@mantine/hooks": "^6.0.22",
+    "@mantine/remix": "^6.0.22",
     "@remix-run/node": "^2.16.8",
     "@remix-run/react": "^2.16.8",
     "@remix-run/serve": "^2.16.8",
     "isbot": "^4.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.5.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@remix-run/dev": "^2.16.8",

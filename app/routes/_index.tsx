@@ -1,138 +1,360 @@
-import type { MetaFunction } from "@remix-run/node";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Container,
+  Flex,
+  Grid,
+  Group,
+  Modal,
+  NativeSelect,
+  Text,
+  Textarea,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { redirect, type MetaFunction } from "@remix-run/node";
+import { Form, useLoaderData, useFetcher } from "@remix-run/react";
+import { FaAngleDown, FaPlus } from "react-icons/fa";
+import { MdLogout } from "react-icons/md";
+import {
+  cookie,
+  createFeedbackPost,
+  deleteCookie,
+  deleteFeedbackPost,
+  feedbacks,
+  getDirectusUser,
+  getFeedbackPost,
+  updateFeedbackPost,
+} from "~/plugins/directus";
+import { useEffect } from "react";
+// import { handleTokenRefresh } from "~/utils/auth";
+// import { getSession } from "~/session/session";
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "New Remix App" },
-    { name: "description", content: "Welcome to Remix!" },
+    { title: "Feedback Portal" },
+    { name: "description", content: "Welcome to my feedback portal" },
   ];
 };
 
+export const loader = async ({ request }: { request: Request }) => {
+  const getCookie = request.headers.get("Cookie");
+  const userToken = await cookie.parse(getCookie);
+  if (!userToken) return redirect("/login");
+  const userInfo = await getDirectusUser(userToken);
+  const feedbacks = await getFeedbackPost();
+  return Response.json({ userInfo, feedbacks });
+};
+
+export const action = async ({ request }: { request: Request }) => {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+  switch (intent) {
+    case "logout": {
+      return redirect("/", {
+        headers: {
+          "Set-Cookie": await deleteCookie.serialize(""),
+        },
+      });
+    }
+    case "create_feedback": {
+      const title = formData.get("title") as string;
+      const category = formData.get("category");
+      const description = formData.get("description") as string;
+
+      if (!title.trim() || !description.trim()) {
+        return Response.json(
+          { error: "Title and Description are required" },
+          { status: 400 }
+        );
+      }
+      const result = await createFeedbackPost({
+        title,
+        description,
+        category: category as "Bug" | "Feature" | "Other",
+      });
+      if (!result) {
+        return Response.json({ error: result }, { status: 400 });
+      }
+
+      return Response.json({ success: "Feedback created successfully!" });
+    }
+    case "update_feedback": {
+      const id = formData.get("id") as string;
+      const status = formData.get("status") as string;
+      const result = await updateFeedbackPost(id, status);
+      if (!result) {
+        return Response.json({ error: result }, { status: 400 });
+      }
+      return Response.json({ success: "Status updated successfully!" });
+    }
+    case "delete_feedback": {
+      const id = formData.get("id") as string;
+      const result = await deleteFeedbackPost(id);
+      if (!result) {
+        return Response.json({ error: result }, { status: 400 });
+      }
+      return Response.json({ success: "Feedback delete successfully!" });
+    }
+    default:
+      return Response.json({ error: "Invalid action" }, { status: 400 });
+  }
+};
+
+type FetcherData = {
+  success?: string;
+  error?: string;
+};
+
 export default function Index() {
+  const [opened, { open, close }] = useDisclosure(false);
+  const { userInfo, feedbacks } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher<FetcherData>();
+
+  // Close modal when form submission is successful
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.success) {
+      close();
+      // Revalidate the data after successful submission
+      fetcher.load("/");
+    }
+  }, [fetcher.state, fetcher.data, close, fetcher]);
+
+  if (!userInfo) {
+    return null;
+  }
+
   return (
-    <div className="flex h-screen items-center justify-center">
-      <div className="flex flex-col items-center gap-16">
-        <header className="flex flex-col items-center gap-9">
-          <h1 className="leading text-2xl font-bold text-gray-800 dark:text-gray-100">
-            Welcome to <span className="sr-only">Remix</span>
-          </h1>
-          <div className="h-[144px] w-[434px]">
-            <img
-              src="/logo-light.png"
-              alt="Remix"
-              className="block w-full dark:hidden"
-            />
-            <img
-              src="/logo-dark.png"
-              alt="Remix"
-              className="hidden w-full dark:block"
-            />
-          </div>
-        </header>
-        <nav className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-gray-200 p-6 dark:border-gray-700">
-          <p className="leading-6 text-gray-700 dark:text-gray-200">
-            What&apos;s next?
-          </p>
-          <ul>
-            {resources.map(({ href, text, icon }) => (
-              <li key={href}>
-                <a
-                  className="group flex items-center gap-3 self-stretch p-3 leading-normal text-blue-700 hover:underline dark:text-blue-500"
-                  href={href}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {icon}
-                  {text}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </div>
-    </div>
+    <Container size="xl" py="xl">
+      <Flex justify={"space-between"} align={"center"}>
+        <Flex direction={"column"} gap={"2px"}>
+          <Title order={1}>
+            {userInfo.role !== "00c1bbf8-af22-467e-80b7-a88b6115eed0"
+              ? "Admin Dashboard"
+              : "My Feedback"}
+          </Title>
+          <Text c="dimmed">
+            Welcome back, {userInfo.first_name} {userInfo.last_name}
+          </Text>
+        </Flex>
+        <Group>
+          <Button leftIcon={<FaPlus size="16px" />} onClick={open}>
+            Create Feedback
+          </Button>
+
+          <Form method="post">
+            <TextInput type="hidden" name="intent" value="logout" />
+            <Button
+              variant="outline"
+              leftIcon={<MdLogout size="1rem" />}
+              type="submit"
+            >
+              Logout
+            </Button>
+          </Form>
+        </Group>
+      </Flex>
+
+      {/* if there is not any card */}
+      {feedbacks?.length <= 0 && (
+        <Flex align={"center"} justify={"center"} mt={"15%"}>
+          <Card shadow="sm" padding="lg" w={"550px"} radius="md" withBorder>
+            <Flex justify={"center"} direction={"column"} align={"center"}>
+              <Text size="xl" weight={700} ff={"sans-serif"}>
+                No feedbacks found
+              </Text>
+              <Text color="dimmed" size="md" mt="xs">
+                Be the first to share your thoughts or report a bug.
+              </Text>
+              <Button
+                mt="md"
+                size="md"
+                variant="light"
+                color="blue"
+                onClick={open}
+                leftIcon={<FaPlus size="16px" />}
+              >
+                Create Feedback
+              </Button>
+            </Flex>
+          </Card>
+        </Flex>
+      )}
+
+      {/* Feedback Card */}
+      <Flex direction={"column"} gap={"sm"} mt={"40px"}>
+        <Grid>
+          {feedbacks &&
+            feedbacks?.map((feedback: feedbacks, index: number) => {
+              return (
+                <Grid.Col span={4} key={index}>
+                  <Card shadow="sm" padding="lg" radius="md" withBorder>
+                    <Badge
+                      color={
+                        feedback?.status === "draft"
+                          ? "yellow"
+                          : feedback?.status === "reject"
+                          ? "red"
+                          : "green"
+                      }
+                    >
+                      {feedback?.status}
+                    </Badge>
+                    <Text fw={500} size="md" mt={"sm"}>
+                      {feedback?.title}
+                    </Text>
+
+                    <Text c="dimmed" size="sm">
+                      {feedback?.description}
+                    </Text>
+                    <Flex gap={"xs"} mt="xs" align={"center"}>
+                      <Text fw={500}>Category of This Feedback : </Text>
+                      <Badge
+                        color={
+                          feedback?.category === "Other"
+                            ? "violet"
+                            : feedback?.category === "Bug"
+                            ? "red"
+                            : "green"
+                        }
+                      >
+                        {feedback?.category}{" "}
+                      </Badge>
+                    </Flex>
+                    {userInfo.role !==
+                      "00c1bbf8-af22-467e-80b7-a88b6115eed0" && (
+                      <Flex gap={"xs"} mt="xs" align={"center"}>
+                        <Text fw={500}>Written By : </Text>
+                        <Badge>
+                          {feedback?.created_by?.first_name}{" "}
+                          {feedback?.created_by?.last_name}
+                        </Badge>
+                      </Flex>
+                    )}
+                    {userInfo.role !==
+                      "00c1bbf8-af22-467e-80b7-a88b6115eed0" && (
+                      <Grid grow>
+                        <Grid.Col span={4}>
+                          <Form method="post">
+                            <TextInput
+                              type="hidden"
+                              name="intent"
+                              value="update_feedback"
+                            />
+                            <TextInput
+                              type="hidden"
+                              name="id"
+                              value={feedback?.id}
+                            />
+
+                            <NativeSelect
+                              name="status"
+                              mt="md"
+                              radius="md"
+                              rightSection={<FaAngleDown size={16} />}
+                              defaultValue={feedback?.status}
+                              data={[
+                                { value: "published", label: "PUBLISHED" },
+                                { value: "draft", label: "DRAFT" },
+                                { value: "reject", label: "REJECT" },
+                              ]}
+                              onChange={(event) => {
+                                const form = event.currentTarget.form;
+                                if (form) form.submit();
+                              }}
+                            />
+                          </Form>
+                        </Grid.Col>
+                        <Grid.Col span={4}>
+                          <fetcher.Form method="post">
+                            <TextInput
+                              type="hidden"
+                              name="id"
+                              value={feedback?.id}
+                            />
+                            <TextInput
+                              type="hidden"
+                              name="intent"
+                              value="delete_feedback"
+                            />
+                            <Button
+                              type="submit"
+                              color="red"
+                              fullWidth
+                              mt="md"
+                              radius="md"
+                              loading={fetcher.state === "submitting"}
+                            >
+                              DELETE
+                            </Button>
+                          </fetcher.Form>
+                        </Grid.Col>
+                      </Grid>
+                    )}
+                  </Card>
+                </Grid.Col>
+              );
+            })}
+        </Grid>
+      </Flex>
+
+      {/* Create feedback form */}
+      <Modal
+        opened={opened}
+        onClose={close}
+        title="Create New Feedback"
+        size="md"
+        centered
+        radius={"lg"}
+      >
+        <fetcher.Form method="post">
+          <TextInput type="hidden" name="intent" value="create_feedback" />
+          <TextInput
+            label="Title"
+            required
+            size="sm"
+            name="title"
+            placeholder="Enter your title"
+            w={"100%"}
+            mb={"md"}
+          />
+          <NativeSelect
+            data={["Bug", "Feature", "Other"]}
+            w="100%"
+            withAsterisk
+            required
+            name="category"
+            label="Category"
+            mb={"md"}
+          />
+          <Textarea
+            label="Description"
+            withAsterisk
+            required
+            w={"100%"}
+            name="description"
+            placeholder="Enter your description"
+            mb={"md"}
+          />
+
+          {fetcher.data?.error && (
+            <Alert color="red" w="100%" mb={"md"}>
+              {fetcher.data.error}
+            </Alert>
+          )}
+
+          <Button
+            type="submit"
+            w={"100%"}
+            loading={fetcher.state === "submitting"}
+          >
+            Submit
+          </Button>
+        </fetcher.Form>
+      </Modal>
+    </Container>
   );
 }
-
-const resources = [
-  {
-    href: "https://remix.run/start/quickstart",
-    text: "Quick Start (5 min)",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        className="stroke-gray-600 group-hover:stroke-current dark:stroke-gray-300"
-      >
-        <path
-          d="M8.51851 12.0741L7.92592 18L15.6296 9.7037L11.4815 7.33333L12.0741 2L4.37036 10.2963L8.51851 12.0741Z"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    href: "https://remix.run/start/tutorial",
-    text: "Tutorial (30 min)",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        className="stroke-gray-600 group-hover:stroke-current dark:stroke-gray-300"
-      >
-        <path
-          d="M4.561 12.749L3.15503 14.1549M3.00811 8.99944H1.01978M3.15503 3.84489L4.561 5.2508M8.3107 1.70923L8.3107 3.69749M13.4655 3.84489L12.0595 5.2508M18.1868 17.0974L16.635 18.6491C16.4636 18.8205 16.1858 18.8205 16.0144 18.6491L13.568 16.2028C13.383 16.0178 13.0784 16.0347 12.915 16.239L11.2697 18.2956C11.047 18.5739 10.6029 18.4847 10.505 18.142L7.85215 8.85711C7.75756 8.52603 8.06365 8.21994 8.39472 8.31453L17.6796 10.9673C18.0223 11.0653 18.1115 11.5094 17.8332 11.7321L15.7766 13.3773C15.5723 13.5408 15.5554 13.8454 15.7404 14.0304L18.1868 16.4767C18.3582 16.6481 18.3582 16.926 18.1868 17.0974Z"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    href: "https://remix.run/docs",
-    text: "Remix Docs",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        className="stroke-gray-600 group-hover:stroke-current dark:stroke-gray-300"
-      >
-        <path
-          d="M9.99981 10.0751V9.99992M17.4688 17.4688C15.889 19.0485 11.2645 16.9853 7.13958 12.8604C3.01467 8.73546 0.951405 4.11091 2.53116 2.53116C4.11091 0.951405 8.73546 3.01467 12.8604 7.13958C16.9853 11.2645 19.0485 15.889 17.4688 17.4688ZM2.53132 17.4688C0.951566 15.8891 3.01483 11.2645 7.13974 7.13963C11.2647 3.01471 15.8892 0.951453 17.469 2.53121C19.0487 4.11096 16.9854 8.73551 12.8605 12.8604C8.73562 16.9853 4.11107 19.0486 2.53132 17.4688Z"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    href: "https://rmx.as/discord",
-    text: "Join Discord",
-    icon: (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="20"
-        viewBox="0 0 24 20"
-        fill="none"
-        className="stroke-gray-600 group-hover:stroke-current dark:stroke-gray-300"
-      >
-        <path
-          d="M15.0686 1.25995L14.5477 1.17423L14.2913 1.63578C14.1754 1.84439 14.0545 2.08275 13.9422 2.31963C12.6461 2.16488 11.3406 2.16505 10.0445 2.32014C9.92822 2.08178 9.80478 1.84975 9.67412 1.62413L9.41449 1.17584L8.90333 1.25995C7.33547 1.51794 5.80717 1.99419 4.37748 2.66939L4.19 2.75793L4.07461 2.93019C1.23864 7.16437 0.46302 11.3053 0.838165 15.3924L0.868838 15.7266L1.13844 15.9264C2.81818 17.1714 4.68053 18.1233 6.68582 18.719L7.18892 18.8684L7.50166 18.4469C7.96179 17.8268 8.36504 17.1824 8.709 16.4944L8.71099 16.4904C10.8645 17.0471 13.128 17.0485 15.2821 16.4947C15.6261 17.1826 16.0293 17.8269 16.4892 18.4469L16.805 18.8725L17.3116 18.717C19.3056 18.105 21.1876 17.1751 22.8559 15.9238L23.1224 15.724L23.1528 15.3923C23.5873 10.6524 22.3579 6.53306 19.8947 2.90714L19.7759 2.73227L19.5833 2.64518C18.1437 1.99439 16.6386 1.51826 15.0686 1.25995ZM16.6074 10.7755L16.6074 10.7756C16.5934 11.6409 16.0212 12.1444 15.4783 12.1444C14.9297 12.1444 14.3493 11.6173 14.3493 10.7877C14.3493 9.94885 14.9378 9.41192 15.4783 9.41192C16.0471 9.41192 16.6209 9.93851 16.6074 10.7755ZM8.49373 12.1444C7.94513 12.1444 7.36471 11.6173 7.36471 10.7877C7.36471 9.94885 7.95323 9.41192 8.49373 9.41192C9.06038 9.41192 9.63892 9.93712 9.6417 10.7815C9.62517 11.6239 9.05462 12.1444 8.49373 12.1444Z"
-          strokeWidth="1.5"
-        />
-      </svg>
-    ),
-  },
-];

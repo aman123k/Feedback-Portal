@@ -1,4 +1,3 @@
-import { readRoles } from "@directus/sdk";
 import {
   Alert,
   Anchor,
@@ -12,9 +11,9 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { Form, redirect, useActionData, useLoaderData } from "@remix-run/react";
+import { Form, redirect, useActionData } from "@remix-run/react";
 import { MdAlternateEmail } from "react-icons/md";
-import directus, { cookie, registerUser } from "~/plugins/directus";
+import { cookie, registerUser } from "~/plugins/directus";
 
 export type ActionData = {
   error?: string;
@@ -25,22 +24,12 @@ interface ApiError {
   errors?: Array<{ message: string }>;
 }
 
-interface LoaderData {
-  roles: Array<{ id: string; name: string }>;
-}
-
 export const loader = async ({ request }: { request: Request }) => {
   try {
     const getCookie = request.headers.get("Cookie");
     const userToken = await cookie.parse(getCookie);
     if (userToken) return redirect("/");
-
-    const roles = await directus.request(
-      readRoles({
-        fields: ["id", "name"],
-      })
-    );
-    return Response.json({ roles });
+    return Response.json({});
   } catch (error) {
     console.error("Error loading roles:", error);
     return Response.json({ roles: [] });
@@ -81,13 +70,17 @@ export const action = async ({ request }: { request: Request }) => {
 
 function Register() {
   const actionData = useActionData<typeof action>();
-  const { roles } = useLoaderData<LoaderData>();
   const icon = <MdAlternateEmail size={16} />;
-  const roleOption =
-    roles?.map((role) => ({
-      label: role.name,
-      value: role.id,
-    })) || [];
+  const roleOption = [
+    {
+      label: "Public",
+      value: "00c1bbf8-af22-467e-80b7-a88b6115eed0",
+    },
+    {
+      label: "Administrator",
+      value: "832bf194-f28d-4b13-9602-2716d1d4869a",
+    },
+  ];
   return (
     <Box bg={"blue"} h="100vh" mih={"100vh"}>
       <Flex align={"center"} justify={"center"} h="100vh">
